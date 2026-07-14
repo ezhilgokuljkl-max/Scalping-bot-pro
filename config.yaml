@@ -1,0 +1,327 @@
+# Scalping Trading Bot Configuration
+# This file contains all configurable parameters for the trading bot
+# Modify these settings without changing the source code
+
+# Application Settings
+app:
+  name: "Scalping Trading Bot"
+  version: "1.0.0"
+  environment: "development"  # development, staging, production
+  debug: true
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+# Trading Mode
+trading:
+  mode: "paper"  # paper (simulation) or live (real money)
+  confirmation_required: true  # Require manual confirmation for live trades
+  
+  # Trading Hours
+  trading_hours:
+    enabled: true
+    start: "09:15"  # IST
+    end: "15:30"    # IST
+    timezone: "Asia/Kolkata"
+  
+  # Profit Target and Stop Loss
+  profit_target: 5  # Points
+  stop_loss: 10     # Points
+  
+  # Position Management
+  quantity: 1       # Lot size
+  max_concurrent_trades: 3
+  max_trades_per_day: 20
+  max_trades_per_minute: 3
+  cooldown_seconds: 30  # Minimum time between trades
+  
+  # Trade Timing
+  min_holding_time_seconds: 30
+  max_holding_time_seconds: 300  # 5 minutes
+  
+  # Symbols
+  symbols:
+    - symbol: "NIFTY50"
+      enabled: true
+      exchange: "NSE"
+      segment: "FO"  # Futures & Options
+      expiry: "CURRENT"  # CURRENT, NEXT, etc.
+    - symbol: "BANKNIFTY"
+      enabled: true
+      exchange: "NSE"
+      segment: "FO"
+      expiry: "CURRENT"
+
+# Risk Management
+risk:
+  # Daily Limits
+  max_daily_loss: -5000  # INR - Stop trading if loss exceeds this
+  max_daily_profit: 10000  # INR - Stop trading if profit exceeds this
+  
+  # Drawdown
+  max_drawdown_percentage: 10.0  # Maximum drawdown from peak
+  drawdown_recovery_required: true  # Stop trading if drawdown limit hit
+  
+  # Per-trade Risk
+  max_risk_per_trade_percentage: 2.0  # 2% of account capital
+  max_position_size_percentage: 5.0  # Max 5% of capital per position
+  
+  # Consecutive Losses
+  max_consecutive_losses: 3
+  pause_trading_after_consecutive_losses: true
+  pause_duration_minutes: 15
+  
+  # Stop Loss and Target Management
+  trailing_stop:
+    enabled: true
+    trail_percentage: 2.0  # Trail by 2% of target hit
+  
+  break_even_on_profit:
+    enabled: true
+    trigger_percentage: 50  # Move SL to entry after 50% of target reached
+  
+  # Position Reversal
+  allow_position_reversal: false
+  reversal_cooldown_seconds: 60
+  
+  # Slippage Tolerance
+  max_slippage_percentage: 0.5
+  slippage_check_enabled: true
+
+# Strategy Configuration
+strategy:
+  active_strategy: "scalping"  # Name of the strategy to use
+  
+  scalping:
+    enabled: true
+    name: "Ultra-Short Scalping"
+    description: "Fast scalping strategy for 30sec-5min trades"
+    
+    # Entry Signals
+    entry_signals:
+      - signal_type: "tradingview_webhook"  # TradingView alerts
+        enabled: true
+      - signal_type: "manual"  # Manual entry from user
+        enabled: true
+    
+    # Exit Signals
+    exit_signals:
+      - signal_type: "profit_target"
+        enabled: true
+      - signal_type: "stop_loss"
+        enabled: true
+      - signal_type: "time_based"
+        enabled: true
+        max_hold_minutes: 5
+      - signal_type: "manual"
+        enabled: true
+    
+    # Indicators (if using)
+    indicators:
+      rsi:
+        enabled: false
+        period: 14
+        overbought: 70
+        oversold: 30
+      macd:
+        enabled: false
+      bollinger_bands:
+        enabled: false
+
+# Broker Configuration
+broker:
+  primary: "paper"  # paper, dhan, zerodha
+  
+  paper_trading:
+    enabled: true
+    starting_capital: 100000
+    enable_slippage_simulation: true
+    slippage_percentage: 0.1
+  
+  dhan:
+    enabled: false
+    client_id: "${DHAN_CLIENT_ID}"
+    access_token: "${DHAN_ACCESS_TOKEN}"
+    base_url: "https://api.dhan.co"
+    timeout_seconds: 10
+    max_retries: 3
+    retry_delay_seconds: 2
+  
+  zerodha:
+    enabled: false
+    api_key: "${ZERODHA_API_KEY}"
+    api_secret: "${ZERODHA_API_SECRET}"
+    base_url: "https://api.kite.trade"
+    request_token: "${ZERODHA_REQUEST_TOKEN}"
+    timeout_seconds: 10
+    max_retries: 3
+    retry_delay_seconds: 2
+
+# Database Configuration
+database:
+  type: "sqlite"  # sqlite or postgresql
+  
+  sqlite:
+    database_file: "trading_bot.db"
+    echo: false
+  
+  postgresql:
+    host: "localhost"
+    port: 5432
+    user: "trading_bot"
+    password: "${DB_PASSWORD}"
+    database: "scalping_bot"
+    echo: false
+    pool_size: 10
+    max_overflow: 20
+  
+  # Data Retention
+  retention:
+    keep_trade_history_days: 365
+    keep_logs_days: 90
+    auto_cleanup: true
+
+# Notifications
+notifications:
+  telegram:
+    enabled: true
+    bot_token: "${TELEGRAM_BOT_TOKEN}"
+    chat_id: "${TELEGRAM_CHAT_ID}"
+    
+    alerts:
+      bot_started: true
+      bot_stopped: true
+      trade_opened: true
+      trade_closed: true
+      profit_booked: true
+      stop_loss_hit: true
+      daily_report: true
+      risk_warning: true
+      errors: true
+      emergency_stop: true
+  
+  email:
+    enabled: false
+    smtp_server: "smtp.gmail.com"
+    smtp_port: 587
+    use_tls: true
+    sender_email: "${EMAIL_FROM}"
+    sender_password: "${SMTP_PASSWORD}"
+    recipient_email: "${EMAIL_TO}"
+    
+    alerts:
+      bot_started: false
+      bot_stopped: false
+      trade_opened: false
+      trade_closed: false
+      daily_report: true
+      errors: true
+
+# API Server Configuration
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  reload: true  # Auto-reload on code changes (development only)
+  
+  # CORS
+  cors:
+    enabled: true
+    allow_origins:
+      - "*"
+    allow_methods:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "DELETE"
+  
+  # Security
+  security:
+    require_api_key: false
+    api_key: "${API_KEY}"
+    require_webhook_signature: true
+    webhook_secret: "${WEBHOOK_SECRET}"
+
+# TradingView Webhook Configuration
+tradingview:
+  enabled: true
+  webhook_path: "/webhook/tradingview"
+  signature_verification: true
+  signature_header: "X-Webhook-Signature"
+  
+  # Alert Filtering
+  filter:
+    allowed_strategies:
+      - "Scalping Strategy"
+    allowed_symbols:
+      - "NIFTY50"
+      - "BANKNIFTY"
+    ignore_duplicate_within_seconds: 5
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  
+  file:
+    enabled: true
+    path: "logs/scalping_bot.log"
+    max_size_bytes: 10485760  # 10MB
+    backup_count: 5
+  
+  database:
+    enabled: true
+    log_trades: true
+    log_orders: true
+    log_errors: true
+    log_api_calls: true
+  
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Manual Trade Mode
+manual_trading:
+  enabled: true
+  confirmation_required: true  # Require confirmation before executing
+  allow_direct_entry: true     # Allow specifying entry price directly
+  
+  fields:
+    entry_price: required
+    stop_loss: required
+    target: required
+    quantity: required
+    direction: required  # BUY or SELL
+
+# Dashboard Configuration
+dashboard:
+  enabled: true
+  refresh_interval_seconds: 2
+  
+  display_items:
+    - bot_status
+    - current_position
+    - open_trades
+    - closed_trades
+    - daily_pnl
+    - win_rate
+    - account_balance
+    - risk_status
+    - api_status
+
+# CLI Configuration
+cli:
+  enabled: true
+  interactive: true
+  prompt: "scalping-bot> "
+  
+  commands:
+    - "start"
+    - "stop"
+    - "status"
+    - "trades"
+    - "buy"
+    - "sell"
+    - "exit"
+    - "exit_all"
+    - "pause"
+    - "resume"
+    - "emergency_stop"
+    - "report"
+    - "help"
+    - "quit"
