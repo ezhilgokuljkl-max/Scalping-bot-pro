@@ -46,7 +46,7 @@ async def get_bot_status():
     return {
         "status": "RUNNING" if bot_instance.running else "STOPPED",
         "mode": bot_instance.mode.upper(),
-        "uptime_seconds": 0,  # Calculate from start time
+        "uptime_seconds": 0,
         "account": {
             "balance": account.balance if account else 0,
             "available": account.available_balance if account else 0,
@@ -185,9 +185,7 @@ async def websocket_endpoint(websocket: WebSocket):
     
     try:
         while True:
-            # Send status every 2 seconds
             await asyncio.sleep(2)
-            
             status = await get_bot_status()
             positions = await get_open_positions()
             
@@ -209,8 +207,9 @@ HTML_DASHBOARD = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🤖 Scalping Bot Dashboard</title>
+    <title>Scalping Bot Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -218,270 +217,406 @@ HTML_DASHBOARD = """
             box-sizing: border-box;
         }
 
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --dark: #0f172a;
+            --darker: #1e293b;
+            --light: #f1f5f9;
+            --border: #334155;
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
-            color: #e0e0e0;
-            padding: 20px;
+            background: linear-gradient(135deg, var(--dark) 0%, var(--darker) 100%);
+            color: #e2e8f0;
+            overflow-x: hidden;
             min-height: 100vh;
         }
 
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 280px;
+            height: 100vh;
+            background: linear-gradient(180deg, #1a1f35 0%, #0f172a 100%);
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 30px 20px;
+            text-align: center;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .sidebar-header h1 {
+            font-size: 1.5em;
+            color: var(--primary);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .sidebar-header i {
+            font-size: 1.8em;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--danger);
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.active {
+            background: var(--success);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .nav-buttons {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .nav-btn {
+            padding: 15px 20px;
+            border: 2px solid transparent;
+            border-radius: 10px;
+            background: rgba(102, 126, 234, 0.1);
+            color: #e2e8f0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.95em;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .nav-btn:hover {
+            background: rgba(102, 126, 234, 0.2);
+            border-color: var(--primary);
+            transform: translateX(5px);
+        }
+
+        .nav-btn i {
+            font-size: 1.2em;
+        }
+
+        .main {
+            margin-left: 280px;
+            padding: 30px;
+            min-height: 100vh;
         }
 
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 30px;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 12px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            margin-bottom: 40px;
+            padding: 30px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+            border: 2px solid var(--border);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
         }
 
         .header h1 {
-            font-size: 2.5em;
-            font-weight: bold;
+            font-size: 2em;
+            color: var(--light);
+        }
+
+        .header p {
+            color: #94a3b8;
+            font-size: 0.95em;
         }
 
         .status-badge {
-            padding: 10px 20px;
+            padding: 12px 24px;
             border-radius: 50px;
             font-weight: bold;
-            font-size: 1.1em;
-            animation: pulse 2s infinite;
+            font-size: 1em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--danger);
+            border: 2px solid var(--danger);
         }
 
         .status-badge.running {
-            background: #10b981;
-            color: white;
-        }
-
-        .status-badge.stopped {
-            background: #ef4444;
-            color: white;
-        }
-
-        .status-badge.paused {
-            background: #f59e0b;
-            color: white;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
+            border-color: var(--success);
         }
 
         .control-panel {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
             gap: 15px;
-            margin-bottom: 30px;
+            margin-bottom: 40px;
         }
 
-        .btn {
-            padding: 12px 24px;
+        .btn-action {
+            padding: 16px 24px;
             border: none;
-            border-radius: 8px;
-            font-size: 1em;
-            font-weight: bold;
+            border-radius: 12px;
+            font-size: 0.95em;
+            font-weight: 700;
             cursor: pointer;
             transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            letter-spacing: 0.5px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
         }
 
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        .btn-action:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
         }
 
-        .btn:active {
-            transform: translateY(0);
+        .btn-action i {
+            font-size: 1.2em;
         }
 
         .btn-start {
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
             color: white;
         }
 
         .btn-stop {
-            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            background: linear-gradient(135deg, var(--danger) 0%, #dc2626 100%);
             color: white;
         }
 
         .btn-pause {
-            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            background: linear-gradient(135deg, var(--warning) 0%, #d97706 100%);
             color: white;
         }
 
         .btn-emergency {
-            background: linear-gradient(135deg, #dc2626 0%, #7f1d1d 100%);
+            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
             color: white;
-            animation: danger-pulse 1s infinite;
+            animation: danger-glow 2s infinite;
         }
 
-        @keyframes danger-pulse {
-            0%, 100% { box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); }
-            50% { box-shadow: 0 4px 25px rgba(220, 38, 38, 0.4); }
+        @keyframes danger-glow {
+            0%, 100% { box-shadow: 0 8px 16px rgba(220, 38, 38, 0.2); }
+            50% { box-shadow: 0 8px 24px rgba(220, 38, 38, 0.4); }
         }
 
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
-            margin-bottom: 30px;
+            margin-bottom: 40px;
         }
 
         .stat-card {
             background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-            border: 2px solid rgba(102, 126, 234, 0.3);
+            border: 2px solid var(--border);
             padding: 25px;
-            border-radius: 12px;
+            border-radius: 15px;
             backdrop-filter: blur(10px);
             transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
         }
 
         .stat-card:hover {
-            border-color: rgba(102, 126, 234, 0.6);
-            transform: translateY(-5px);
+            border-color: var(--primary);
+            transform: translateY(-8px);
+            box-shadow: 0 16px 40px rgba(102, 126, 234, 0.2);
         }
 
         .stat-label {
-            font-size: 0.9em;
-            color: #a0a0a0;
+            font-size: 0.85em;
+            color: #94a3b8;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 8px;
+            letter-spacing: 1.2px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stat-label i {
+            color: var(--primary);
+            font-size: 1.1em;
         }
 
         .stat-value {
-            font-size: 2em;
-            font-weight: bold;
-            color: #667eea;
+            font-size: 2.2em;
+            font-weight: 800;
+            color: var(--light);
+            font-family: 'Courier New', monospace;
         }
 
         .stat-value.positive {
-            color: #10b981;
+            color: var(--success);
         }
 
         .stat-value.negative {
-            color: #ef4444;
+            color: var(--danger);
         }
 
         .section {
-            background: linear-gradient(135deg, rgba(45, 45, 68, 0.8) 0%, rgba(65, 65, 85, 0.8) 100%);
-            border: 2px solid rgba(102, 126, 234, 0.2);
-            padding: 25px;
-            border-radius: 12px;
-            margin-bottom: 25px;
+            background: linear-gradient(135deg, rgba(45, 45, 68, 0.5) 0%, rgba(65, 65, 85, 0.5) 100%);
+            border: 2px solid var(--border);
+            padding: 30px;
+            border-radius: 15px;
             backdrop-filter: blur(10px);
+            margin-bottom: 30px;
         }
 
         .section h2 {
-            margin-bottom: 20px;
-            font-size: 1.5em;
-            color: #667eea;
-            border-bottom: 2px solid rgba(102, 126, 234, 0.5);
-            padding-bottom: 10px;
+            margin-bottom: 25px;
+            font-size: 1.6em;
+            color: var(--light);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 15px;
+        }
+
+        .section h2 i {
+            color: var(--primary);
+            font-size: 1.4em;
         }
 
         .positions-table {
             width: 100%;
             border-collapse: collapse;
-            overflow-x: auto;
+            border-spacing: 0;
         }
 
         .positions-table thead {
-            background: rgba(102, 126, 234, 0.2);
+            background: rgba(102, 126, 234, 0.15);
+            border-bottom: 2px solid var(--border);
         }
 
         .positions-table th {
-            padding: 15px;
+            padding: 18px 15px;
             text-align: left;
-            font-weight: bold;
-            color: #667eea;
-            border-bottom: 2px solid rgba(102, 126, 234, 0.5);
+            font-weight: 700;
+            color: var(--primary);
+            font-size: 0.95em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .positions-table td {
-            padding: 15px;
-            border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+            padding: 18px 15px;
+            border-bottom: 1px solid rgba(102, 126, 234, 0.1);
+            font-size: 0.95em;
         }
 
         .positions-table tr:hover {
-            background: rgba(102, 126, 234, 0.1);
+            background: rgba(102, 126, 234, 0.08);
+        }
+
+        .positions-table tr:last-child td {
+            border-bottom: none;
         }
 
         .badge {
-            padding: 6px 12px;
-            border-radius: 50px;
+            padding: 8px 14px;
+            border-radius: 8px;
             font-size: 0.85em;
-            font-weight: bold;
+            font-weight: 700;
+            display: inline-block;
+            letter-spacing: 0.3px;
         }
 
         .badge-buy {
             background: rgba(16, 185, 129, 0.2);
-            color: #10b981;
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.4);
         }
 
         .badge-sell {
             background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-        }
-
-        .badge-pending {
-            background: rgba(245, 158, 11, 0.2);
-            color: #f59e0b;
+            color: var(--danger);
+            border: 1px solid rgba(239, 68, 68, 0.4);
         }
 
         .pnl-positive {
-            color: #10b981;
-            font-weight: bold;
+            color: var(--success);
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
         }
 
         .pnl-negative {
-            color: #ef4444;
-            font-weight: bold;
+            color: var(--danger);
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
         }
 
         .exit-btn {
-            padding: 6px 12px;
-            background: #667eea;
+            padding: 10px 16px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
             color: white;
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
             cursor: pointer;
             font-size: 0.85em;
+            font-weight: 700;
             transition: all 0.2s ease;
         }
 
         .exit-btn:hover {
-            background: #764ba2;
-            transform: scale(1.05);
+            transform: scale(1.08);
+            box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
         }
 
         .empty-state {
             text-align: center;
-            padding: 40px;
-            color: #707070;
+            padding: 60px 40px;
+            color: #64748b;
         }
 
-        .empty-state svg {
-            width: 60px;
-            height: 60px;
-            margin-bottom: 15px;
-            opacity: 0.5;
+        .empty-state i {
+            font-size: 3.5em;
+            margin-bottom: 20px;
+            color: var(--border);
         }
 
-        .chart-container {
-            position: relative;
-            height: 300px;
-            margin-bottom: 30px;
+        .empty-state p {
+            font-size: 1.1em;
         }
 
         .loading {
@@ -489,19 +624,40 @@ HTML_DASHBOARD = """
             width: 20px;
             height: 20px;
             border: 3px solid rgba(102, 126, 234, 0.3);
+            border-top-color: var(--primary);
             border-radius: 50%;
-            border-top-color: #667eea;
-            animation: spin 1s ease-in-out infinite;
+            animation: spin 1s linear infinite;
         }
 
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
 
+        .price-up {
+            color: var(--success);
+            font-weight: 700;
+        }
+
+        .price-down {
+            color: var(--danger);
+            font-weight: 700;
+        }
+
         @media (max-width: 768px) {
+            .sidebar {
+                width: 0;
+                overflow: hidden;
+            }
+
+            .main {
+                margin-left: 0;
+                padding: 20px;
+            }
+
             .header {
                 flex-direction: column;
                 gap: 15px;
+                text-align: center;
             }
 
             .control-panel {
@@ -516,90 +672,120 @@ HTML_DASHBOARD = """
                 font-size: 0.9em;
             }
 
-            .positions-table th, .positions-table td {
-                padding: 10px;
+            .positions-table th,
+            .positions-table td {
+                padding: 12px 10px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h1><i class="fas fa-robot"></i>SCALPING BOT</h1>
+            <p style="color: #94a3b8; font-size: 0.85em; margin-top: 8px;">Trading Dashboard</p>
+        </div>
+        <div class="nav-buttons">
+            <button class="nav-btn" onclick="startBot()" style="background: rgba(16, 185, 129, 0.1);">
+                <i class="fas fa-play"></i>START BOT
+            </button>
+            <button class="nav-btn" onclick="pauseBot()" style="background: rgba(245, 158, 11, 0.1);">
+                <i class="fas fa-pause"></i>PAUSE BOT
+            </button>
+            <button class="nav-btn" onclick="stopBot()" style="background: rgba(239, 68, 68, 0.1);">
+                <i class="fas fa-stop"></i>STOP BOT
+            </button>
+            <button class="nav-btn" onclick="emergencyStop()" style="background: rgba(139, 0, 0, 0.2); color: #ff6b6b; margin-top: auto;">
+                <i class="fas fa-exclamation-triangle"></i>EMERGENCY
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main">
         <!-- Header -->
         <div class="header">
             <div>
-                <h1>🤖 Scalping Bot</h1>
-                <p style="color: rgba(255,255,255,0.8); margin-top: 5px;">Real-Time Trading Dashboard</p>
+                <h1><i class="fas fa-chart-line" style="color: var(--primary);"></i>Trading Dashboard</h1>
+                <p>Real-time bot performance and position tracking</p>
             </div>
-            <div class="status-badge running" id="statusBadge">🔴 INITIALIZING</div>
+            <div class="status-badge" id="statusBadge">
+                <span class="status-indicator"></span>
+                <span id="statusText">INITIALIZING</span>
+            </div>
         </div>
 
         <!-- Control Panel -->
         <div class="control-panel">
-            <button class="btn btn-start" onclick="startBot()">▶️ START</button>
-            <button class="btn btn-pause" onclick="pauseBot()">⏸️ PAUSE</button>
-            <button class="btn btn-stop" onclick="stopBot()">⏹️ STOP</button>
-            <button class="btn btn-emergency" onclick="emergencyStop()">🚨 EMERGENCY</button>
+            <button class="btn-action btn-start" onclick="startBot()" title="Start Trading">
+                <i class="fas fa-play"></i>START
+            </button>
+            <button class="btn-action btn-pause" onclick="pauseBot()" title="Pause Trading">
+                <i class="fas fa-pause"></i>PAUSE
+            </button>
+            <button class="btn-action btn-stop" onclick="stopBot()" title="Stop Bot">
+                <i class="fas fa-square"></i>STOP
+            </button>
+            <button class="btn-action btn-emergency" onclick="emergencyStop()" title="Emergency Stop">
+                <i class="fas fa-fire"></i>EMERGENCY
+            </button>
         </div>
 
-        <!-- Statistics -->
+        <!-- Statistics Grid -->
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-label">Account Balance</div>
-                <div class="stat-value" id="statBalance">₹ 0</div>
+                <div class="stat-label"><i class="fas fa-wallet"></i>Account Balance</div>
+                <div class="stat-value" id="statBalance">₹100,000</div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">Available Balance</div>
-                <div class="stat-value" id="statAvailable">₹ 0</div>
+                <div class="stat-label"><i class="fas fa-coins"></i>Available</div>
+                <div class="stat-value" id="statAvailable">₹95,000</div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">Today's P&L</div>
-                <div class="stat-value positive" id="statTodayPnL">₹ 0</div>
+                <div class="stat-label"><i class="fas fa-calendar-today"></i>Today's P&L</div>
+                <div class="stat-value positive" id="statTodayPnL">+₹2,500</div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">Total P&L</div>
-                <div class="stat-value positive" id="statTotalPnL">₹ 0</div>
+                <div class="stat-label"><i class="fas fa-chart-pie"></i>Total P&L</div>
+                <div class="stat-value positive" id="statTotalPnL">+₹5,200</div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">Open Positions</div>
-                <div class="stat-value" id="statOpenPositions">0</div>
+                <div class="stat-label"><i class="fas fa-hourglass-half"></i>Open Positions</div>
+                <div class="stat-value" id="statOpenPositions" style="color: var(--primary);">0</div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">Total Trades</div>
-                <div class="stat-value" id="statTotalTrades">0</div>
+                <div class="stat-label"><i class="fas fa-exchange-alt"></i>Total Trades</div>
+                <div class="stat-value" id="statTotalTrades" style="color: var(--primary);">0</div>
             </div>
         </div>
 
-        <!-- Open Positions -->
+        <!-- Open Positions Section -->
         <div class="section">
-            <h2>📊 Open Positions</h2>
+            <h2><i class="fas fa-list"></i>Open Positions</h2>
             <div id="positionsContainer">
                 <div class="empty-state">
-                    <div class="loading"></div>
-                    <p>Loading positions...</p>
+                    <i class="fas fa-inbox"></i>
+                    <p>No open positions</p>
                 </div>
-            </div>
-        </div>
-
-        <!-- Performance Metrics -->
-        <div class="section">
-            <h2>📈 Performance Metrics</h2>
-            <div class="chart-container">
-                <canvas id="performanceChart"></canvas>
             </div>
         </div>
     </div>
 
     <script>
         let ws = null;
-        let performanceChart = null;
 
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
             
             ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                updateDashboard(data);
+                try {
+                    const data = JSON.parse(event.data);
+                    updateDashboard(data);
+                } catch (e) {
+                    console.error('Error parsing message:', e);
+                }
             };
 
             ws.onerror = () => {
@@ -614,33 +800,49 @@ HTML_DASHBOARD = """
 
             // Update status badge
             const badge = document.getElementById('statusBadge');
-            badge.textContent = status.status === 'RUNNING' ? '🟢 RUNNING' : '🔴 STOPPED';
-            badge.className = `status-badge ${status.status.toLowerCase()}`;
+            const indicator = badge.querySelector('.status-indicator');
+            const statusText = document.getElementById('statusText');
+            
+            if (status.status === 'RUNNING') {
+                badge.classList.add('running');
+                indicator.classList.add('active');
+                statusText.textContent = 'RUNNING';
+            } else {
+                badge.classList.remove('running');
+                indicator.classList.remove('active');
+                statusText.textContent = 'STOPPED';
+            }
 
             // Update stats
-            document.getElementById('statBalance').textContent = `₹ ${status.account.balance.toLocaleString()}`;
-            document.getElementById('statAvailable').textContent = `₹ ${status.account.available.toLocaleString()}`;
+            updateStatCard('statBalance', `₹${status.account.balance.toLocaleString()}`);
+            updateStatCard('statAvailable', `₹${status.account.available.toLocaleString()}`);
             
-            const todayPnLElement = document.getElementById('statTodayPnL');
-            todayPnLElement.textContent = `₹ ${status.account.today_pnl.toLocaleString()}`;
-            todayPnLElement.className = status.account.today_pnl >= 0 ? 'stat-value positive' : 'stat-value negative';
-
-            const totalPnLElement = document.getElementById('statTotalPnL');
-            totalPnLElement.textContent = `₹ ${status.account.total_pnl.toLocaleString()}`;
-            totalPnLElement.className = status.account.total_pnl >= 0 ? 'stat-value positive' : 'stat-value negative';
-
-            document.getElementById('statOpenPositions').textContent = positions.count;
-            document.getElementById('statTotalTrades').textContent = status.account.total_trades;
+            updatePnLCard('statTodayPnL', status.account.today_pnl);
+            updatePnLCard('statTotalPnL', status.account.total_pnl);
+            
+            updateStatCard('statOpenPositions', positions.count);
+            updateStatCard('statTotalTrades', status.account.total_trades);
 
             // Update positions table
             updatePositionsTable(positions.positions);
+        }
+
+        function updateStatCard(id, value) {
+            document.getElementById(id).textContent = value;
+        }
+
+        function updatePnLCard(id, value) {
+            const element = document.getElementById(id);
+            const formattedValue = `${value >= 0 ? '+' : ''}₹${value.toLocaleString()}`;
+            element.textContent = formattedValue;
+            element.className = value >= 0 ? 'stat-value positive' : 'stat-value negative';
         }
 
         function updatePositionsTable(positions) {
             const container = document.getElementById('positionsContainer');
             
             if (!positions || positions.length === 0) {
-                container.innerHTML = '<div class="empty-state"><p>📭 No open positions</p></div>';
+                container.innerHTML = '<div class="empty-state"><i class="fas fa-inbox"></i><p>No open positions</p></div>';
                 return;
             }
 
@@ -650,15 +852,15 @@ HTML_DASHBOARD = """
                         <tr>
                             <th>Symbol</th>
                             <th>Side</th>
-                            <th>Entry Price</th>
-                            <th>Current Price</th>
+                            <th>Entry</th>
+                            <th>Current</th>
                             <th>Qty</th>
                             <th>P&L</th>
-                            <th>Return %</th>
-                            <th>Stop Loss</th>
+                            <th>Return</th>
+                            <th>SL</th>
                             <th>Target</th>
                             <th>Time</th>
-                            <th>Action</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -673,15 +875,15 @@ HTML_DASHBOARD = """
                     <tr>
                         <td><strong>${pos.symbol}</strong></td>
                         <td><span class="badge ${sideClass}">${pos.side}</span></td>
-                        <td>₹ ${pos.entry_price.toFixed(2)}</td>
-                        <td>₹ ${pos.current_price.toFixed(2)}</td>
+                        <td>₹${pos.entry_price.toFixed(2)}</td>
+                        <td>₹${pos.current_price.toFixed(2)}</td>
                         <td>${pos.quantity}</td>
-                        <td class="${pnlClass}">₹ ${pos.pnl.toFixed(2)}</td>
-                        <td class="${pnlClass}">${pos.pnl_percent.toFixed(2)}%</td>
-                        <td>₹ ${pos.stop_loss.toFixed(2)}</td>
-                        <td>₹ ${pos.target_1.toFixed(2)}</td>
+                        <td class="${pnlClass}">₹${Math.abs(pos.pnl).toFixed(2)}</td>
+                        <td class="${pnlClass}">${(pos.pnl_percent >= 0 ? '+' : '')}${pos.pnl_percent.toFixed(2)}%</td>
+                        <td>₹${pos.stop_loss.toFixed(2)}</td>
+                        <td>₹${pos.target_1.toFixed(2)}</td>
                         <td>${durationMin}m</td>
-                        <td><button class="exit-btn" onclick="exitTrade('${pos.trade_id}')">EXIT</button></td>
+                        <td><button class="exit-btn" onclick="exitTrade('${pos.trade_id}')"><i class="fas fa-sign-out-alt"></i></button></td>
                     </tr>
                 `;
             });
@@ -694,43 +896,22 @@ HTML_DASHBOARD = """
             try {
                 const response = await fetch(endpoint, { method });
                 const data = await response.json();
-                alert(`✅ ${data.message || data.status}`);
             } catch (error) {
-                alert(`❌ Error: ${error.message}`);
+                console.error('API Error:', error);
             }
         }
 
-        function startBot() {
-            apiCall('/api/commands/start', 'POST');
-        }
-
-        function stopBot() {
-            if (confirm('⚠️ Stop the bot and close all positions?')) {
-                apiCall('/api/commands/stop', 'POST');
-            }
-        }
-
-        function pauseBot() {
-            apiCall('/api/commands/pause', 'POST');
-        }
-
-        function emergencyStop() {
-            if (confirm('🚨 EMERGENCY STOP - This will close ALL positions immediately! Continue?')) {
-                apiCall('/api/commands/emergency_stop', 'POST');
-            }
-        }
-
-        function exitTrade(tradeId) {
-            if (confirm('Exit this trade?')) {
-                apiCall(`/api/commands/exit/${tradeId}`, 'POST');
-            }
-        }
+        function startBot() { apiCall('/api/commands/start', 'POST'); }
+        function stopBot() { if (confirm('Stop bot and close positions?')) apiCall('/api/commands/stop', 'POST'); }
+        function pauseBot() { apiCall('/api/commands/pause', 'POST'); }
+        function emergencyStop() { if (confirm('EMERGENCY STOP - Close ALL positions?')) apiCall('/api/commands/emergency_stop', 'POST'); }
+        function exitTrade(tradeId) { if (confirm('Exit this trade?')) apiCall(`/api/commands/exit/${tradeId}`, 'POST'); }
 
         // Initialize
         window.addEventListener('DOMContentLoaded', () => {
             connectWebSocket();
             setInterval(() => {
-                if (ws.readyState !== WebSocket.OPEN) {
+                if (ws && ws.readyState !== WebSocket.OPEN) {
                     connectWebSocket();
                 }
             }, 5000);
@@ -740,12 +921,10 @@ HTML_DASHBOARD = """
 </html>
 """
 
-
 def set_bot_instance(bot):
     """Set the bot instance for the dashboard."""
     global bot_instance
     bot_instance = bot
-
 
 def start_dashboard_server(host: str = "0.0.0.0", port: int = 8000):
     """Start the dashboard FastAPI server."""
