@@ -15,7 +15,7 @@ import sys
 from datetime import datetime, time
 from typing import Optional
 
-from scalping.py import ScalpingStrategy
+from scalping import ScalpingStrategy
 from position_manager import PositionManager
 from order_manager import OrderManager
 from risk_manager import RiskManager
@@ -207,18 +207,18 @@ class ScalpingBot:
             logger.info(f"Order placed: {order.order_id}")
             
             # Track position
-            self.position_manager.add_position({
-                "symbol": signal.symbol,
-                "side": signal.side,
-                "entry_price": signal.entry_price,
-                "stop_loss": signal.stop_loss,
-                "target_1": signal.target_1,
-                "target_2": signal.target_2,
-                "target_3": signal.target_3,
-                "quantity": signal.quantity,
-                "order_id": order.order_id,
-                "entered_at": datetime.now()
-            })
+            self.position_manager.add_trade(
+                trade_id=order.order_id,
+                symbol=signal.symbol,
+                side=signal.side.value,
+                entry_price=signal.entry_price,
+                quantity=signal.quantity,
+                stop_loss=signal.stop_loss,
+                target_1=signal.target_1,
+                target_2=signal.target_2,
+                target_3=signal.target_3,
+                metadata={"order_id": order.order_id, "entered_at": datetime.now()}
+            )
             
             return True
             
@@ -229,15 +229,18 @@ class ScalpingBot:
     async def _check_open_positions(self):
         """Check and manage open positions."""
         try:
-            positions = self.position_manager.get_open_positions()
+            positions = self.position_manager.get_open_trades()
             
             for position in positions:
                 # Get current market data
-                market_data = await self.broker.get_market_data(position["symbol"])
+                market_data = await self.broker.get_market_data(position.symbol)
                 if not market_data:
                     continue
                 
                 current_price = market_data.get("close")
+                
+                # Update position price
+                self.position_manager.update_trade_price(position.trade_id, current_price)
                 
                 # Check for exit conditions
                 should_exit = self._check_exit_conditions(position, current_price)
@@ -247,7 +250,7 @@ class ScalpingBot:
         except Exception as e:
             logger.error(f"Error checking positions: {e}")
 
-    def _check_exit_conditions(self, position: dict, current_price: float) -> bool:
+    def _check_exit_conditions(self, position, current_price: float) -> bool:
         """Check if position should be exited.
         
         Args:
@@ -258,31 +261,26 @@ class ScalpingBot:
             True if position should be exited
         """
         try:
-            side = position["side"]
-            entry_price = position["entry_price"]
-            stop_loss = position["stop_loss"]
-            target_1 = position["target_1"]
-            
             # Stop loss hit
-            if side.value == "BUY" and current_price <= stop_loss:
-                logger.warning(f"Stop loss hit for {position['symbol']}")
+            if position.side == "BUY" and current_price <= position.stop_loss:
+                logger.warning(f"Stop loss hit for {position.symbol}")
                 return True
-            elif side.value == "SELL" and current_price >= stop_loss:
-                logger.warning(f"Stop loss hit for {position['symbol']}")
+            elif position.side == "SELL" and current_price >= position.stop_loss:
+                logger.warning(f"Stop loss hit for {position.symbol}")
                 return True
             
             # Take profit at target
-            if side.value == "BUY" and current_price >= target_1:
-                logger.info(f"Target hit for {position['symbol']}")
+            if position.side == "BUY" and current_price >= position.target_1:
+                logger.info(f"Target hit for {position.symbol}")
                 return True
-            elif side.value == "SELL" and current_price <= target_1:
-                logger.info(f"Target hit for {position['symbol']}")
+            elif position.side == "SELL" and current_price <= position.target_1:
+                logger.info(f"Target hit for {position.symbol}")
                 return True
             
             # Time-based exit (5 minutes for scalping)
-            time_in_trade = (datetime.now() - position["entered_at"]).total_seconds()
+            time_in_trade = (datetime.now() - position.entry_time).total_seconds()
             if time_in_trade > 300:  # 5 minutes
-                logger.info(f"Time-based exit for {position['symbol']}")
+                logger.info(f"Time-based exit for {position.symbol}")
                 return True
             
             return False
@@ -291,7 +289,7 @@ class ScalpingBot:
             logger.error(f"Error checking exit conditions: {e}")
             return False
 
-    async def _exit_position(self, position: dict, exit_price: float):
+    async def _exit_position(self, position, exit_price: float):
         """Exit a position.
         
         Args:
@@ -300,51 +298,28 @@ class ScalpingBot:
         """
         try:
             # Close position on broker
-            order = await self.broker.close_position(position["order_id"])
+            order = await self.broker.close_position(position.trade_id)
             if order:
-                logger.info(f"Position closed: {position['symbol']}")
+                logger.info(f"Position closed: {position.symbol}")
                 
-                # Calculate P&L
-                pnl = self._calculate_pnl(position, exit_price)
+                # Close position in manager
+                summary = self.position_manager.close_trade(position.trade_id, exit_price)
                 
-                await self.notifier.notify(
-                    f"💰 Trade Closed: {position['symbol']}",
-                    f"Exit Price: {exit_price}\nP&L: ₹{pnl}"
-                )
-            
-            # Remove from position manager
-            self.position_manager.remove_position(position["order_id"])
+                if summary:
+                    await self.notifier.notify(
+                        f"💰 Trade Closed: {position.symbol}",
+                        f"Exit Price: {exit_price}\nP&L: ₹{summary['pnl']}\nReturn: {summary['pnl_percentage']:.2f}%"
+                    )
             
         except Exception as e:
             logger.error(f"Error exiting position: {e}")
 
-    def _calculate_pnl(self, position: dict, exit_price: float) -> float:
-        """Calculate P&L for a position.
-        
-        Args:
-            position: Position data
-            exit_price: Exit price
-            
-        Returns:
-            P&L amount
-        """
-        entry_price = position["entry_price"]
-        quantity = position["quantity"]
-        side = position["side"]
-        
-        if side.value == "BUY":
-            pnl = (exit_price - entry_price) * quantity
-        else:  # SELL
-            pnl = (entry_price - exit_price) * quantity
-        
-        return pnl
-
     async def _close_all_positions(self):
         """Close all open positions."""
-        positions = self.position_manager.get_open_positions()
-        for position in positions:
+        positions = self.position_manager.get_open_trades()
+        for position in list(positions):  # Create a copy as we're modifying
             try:
-                market_data = await self.broker.get_market_data(position["symbol"])
+                market_data = await self.broker.get_market_data(position.symbol)
                 if market_data:
                     current_price = market_data.get("close")
                     await self._exit_position(position, current_price)
@@ -397,7 +372,7 @@ async def main():
     """Main entry point."""
     import yaml
     from dhan import DhanBroker
-    from paper_trading import PaperBroker
+    from paper_trading import PaperTradingBroker
     
     # Load configuration
     try:
@@ -417,7 +392,7 @@ async def main():
         from zerodha import ZerodhaBroker
         broker = ZerodhaBroker()
     else:
-        broker = PaperBroker(
+        broker = PaperTradingBroker(
             starting_capital=broker_config.get("paper_starting_capital", 100000)
         )
     
